@@ -38,7 +38,7 @@ public class FlowSearch {
         this.port = port;
     }
 
-    private JSONObject request(final String data, final String url) {
+    private JSONObject post(final String data, final String url) {
         final DefaultHttpClient httpClient = new DefaultHttpClient();
         try {
             final HttpPost httpPost = new HttpPost(url);
@@ -54,14 +54,35 @@ public class FlowSearch {
         return null;
     }
 
+    private JSONObject delete(final String data, final String url) {
+        final DefaultHttpClient httpClient = new DefaultHttpClient();
+        try {
+            final HttpDeleteWithBody httpDelete = new HttpDeleteWithBody(url);
+            httpDelete.setEntity(new StringEntity(data));
+            httpDelete.addHeader("Content-Type", "application/json");
+            final HttpResponse response = httpClient.execute(httpDelete);
+            return new JSONObject(EntityUtils.toString(response.getEntity()));
+        } catch (Exception e) {
+            System.err.println("Error connecting to Elastic Search: " + e.getMessage());
+        } finally {
+            httpClient.getConnectionManager().shutdown();
+        }
+        return null;
+    }
+
     protected JSONObject search() {
         final String data = "{\"sort\":[{\"@timestamp\":{\"order\":\"asc\"}}],\"query\":{\"range\":{\"@timestamp\":{\"gt\":\"" + start + "\",\"lte\":\"" + (end == null ? "now" : end) + "\"}}}}";
-        return request(data, "http://" + host + ":" + port + "/_search?size=1000&scroll=1m");
+        return post(data, "http://" + host + ":" + port + "/_search?size=1000&scroll=1m");
     }
 
     protected JSONObject scroll(final String scrollId) {
         final String data = "{\"scroll\":\"1m\",\"scroll_id\":\"" + scrollId + "\"}";
-        return request(data, "http://" + host + ":" + port + "/_search/scroll");
+        return post(data, "http://" + host + ":" + port + "/_search/scroll");
+    }
+
+    protected JSONObject clear(final String scrollId) {
+        final String data = "{\"scroll_id\":\"" + scrollId + "\"}";
+        return delete(data, "http://" + host + ":" + port + "/_search/scroll");
     }
 
     private List<Flow> getResults(final JSONObject jsonObject) {
@@ -86,6 +107,7 @@ public class FlowSearch {
                 jsonObject = scroll(scrollId);
                 scrollResults = getResults(jsonObject);
             }
+            clear(scrollId);
         }
         return results;
     }
